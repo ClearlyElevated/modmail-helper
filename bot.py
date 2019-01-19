@@ -4,7 +4,7 @@ from discord.ext import commands
 from aiohttp import ClientSession
 
 
-bot = commands.Bot(command_prefix='%')
+bot = commands.Bot(command_prefix='$')
 
 
 session = ClientSession(loop=bot.loop)
@@ -34,13 +34,11 @@ def get_payload(version):
 
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def checkout(ctx, version):
-
+async def checkout(ctx, *, version: str):
     async with session.post(url=url, headers=headers,
                             json=get_payload(version)) as r:
-        msg = await r.json()
+        msg = (await r.json()).get('output_stream_url', 'Something\'s Wrong...')
         await ctx.send(msg)
-        print(msg)
 
 
 bot.run(getenv('BOT_TOKEN'))
