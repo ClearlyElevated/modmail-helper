@@ -146,7 +146,7 @@ async def setenv(ctx: commands.Context, key: str, *, value: str):
         key: value
     }
     if key == 'TOKEN':
-        return await ctx.send(embed=Embed(title='Cannot mess with TOKEN'))
+        return await ctx.send(embed=Embed(title='Cannot mess with TOKEN.'))
 
     return await ctx.send(embed=Embed(title=await send_env(payload)))
 
@@ -158,9 +158,22 @@ async def rmenv(ctx: commands.Context, key: str):
         key: None
     }
     if key == 'TOKEN':
-        return await ctx.send(embed=Embed(title='Cannot mess with TOKEN'))
+        return await ctx.send(embed=Embed(title='Cannot mess with TOKEN.'))
 
     return await ctx.send(embed=Embed(title=await send_env(payload)))
 
+
+@bot.command(name='getenv')
+@commands.has_permissions(administrator=True)
+async def getenv_(ctx: commands.Context):
+    async with session.get(config_url, headers=headers) as resp:
+        envs = await resp.json()
+        em = Embed(title='Environment Variables:')
+        for num, (key, val) in enumerate(envs.items()):
+            if num % 25 == 0 and num > 0:
+                await ctx.send(embed=em)
+                em = Embed(title='Environment Variables:')
+            em.add_field(name=key + ':', value=f'`{val}`')
+        return await ctx.send(embed=em)
 
 bot.run(getenv('BOT_TOKEN'))
