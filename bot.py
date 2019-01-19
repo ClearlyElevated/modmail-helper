@@ -15,6 +15,7 @@ session = ClientSession(loop=bot.loop)
 build_url = f"https://api.heroku.com/apps/{getenv('APP_NAME')}/builds"
 versions_url = f'https://api.github.com/repos/kyb3r/modmail/tags'
 latest_url = f'https://api.github.com/repos/kyb3r/modmail/releases/latest'
+restart_url = f"https://api.heroku.com/apps/{getenv('APP_NAME')}/dynos"
 
 headers = {
     'Accept': 'application/vnd.heroku+json; version=3',
@@ -57,6 +58,14 @@ async def versions_(ctx: commands.Context):
             em = Embed(title='Versions:')
         em.add_field(name=version, value=tarball)
     return await ctx.send(embed=em)
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def restart(ctx: commands.Context):
+    async with session.delete(restart_url, headers=headers) as resp:
+        status = 'Success' if str(resp.status).startswith('2') else 'Failed'
+        return await ctx.send(embed=Embed(title=status))
 
 
 @bot.command()
