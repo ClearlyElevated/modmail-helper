@@ -9,13 +9,16 @@ load_dotenv(verbose=True)
 
 
 bot = commands.Bot(command_prefix='$')
-
-
 session = ClientSession(loop=bot.loop)
-build_url = f"https://api.heroku.com/apps/{getenv('APP_NAME')}/builds"
-versions_url = f'https://api.github.com/repos/kyb3r/modmail/tags'
-latest_url = f'https://api.github.com/repos/kyb3r/modmail/releases/latest'
-restart_url = f"https://api.heroku.com/apps/{getenv('APP_NAME')}/dynos"
+
+heroku_base = f"https://api.heroku.com/apps/{getenv('APP_NAME')}"
+github_base = 'https://api.github.com/repos/kyb3r/modmail/'
+
+build_url = heroku_base + '/builds'
+versions_url = github_base + '/tags'
+latest_url = github_base + '/releases/latest'
+restart_url = heroku_base + '/dynos'
+config_url = heroku_base + '/config-vars'
 
 headers = {
     'Accept': 'application/vnd.heroku+json; version=3',
@@ -31,7 +34,7 @@ async def on_ready():
 
 
 async def get_versions():
-    async with session.get(url=versions_url) as resp:
+    async with session.get(versions_url) as resp:
         data = await resp.json()
         return {version['name']: version['tarball_url'] for version in data}
 
@@ -39,10 +42,6 @@ async def get_versions():
 async def get_latest():
     async with session.get(url=latest_url) as resp:
         return (await resp.json()).get('tag_name')
-
-
-def get_payload(url):
-    return {'source_blob': {'url': url}}
 
 
 @bot.command(name='versions')
@@ -94,15 +93,20 @@ async def checkout(ctx: commands.Context, *, version: str):
             description=f'Cannot find {version}'
         ))
 
-    async with session.post(url=build_url, headers=headers,
-                            json=get_payload(versions[version])) as resp:
+    payload = {
+        'source_blob': {
+            'url': versions[version]
+        }
+    }
+    async with session.post(build_url, headers=headers,
+                            json=payload) as resp:
 
         em = Embed(title="Output Stream", description='starting...')
         msg = await ctx.send(embed=em)
         current = ''
 
         output_url = (await resp.json()).get('output_stream_url')
-        async with session.get(url=output_url) as resp2:
+        async with session.get(output_url) as resp2:
             async for data, _ in resp2.content.iter_chunks():
                 data = data.decode()
                 if len(data) + len(current) >= 2048:
@@ -126,6 +130,37 @@ async def checkout(ctx: commands.Context, *, version: str):
             em = Embed(title='Output Stream',
                        description=f'Failed to stream output. {output_url}')
             await msg.edit(em)
+
+
+async def send_env(payload):
+    async with session.patch(config_url,
+                             headers=headers,
+                             json=payload) as resp:
+        return 'Success' if str(resp.status).startswith('2') else 'Failed'
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def setenv(ctx: commands.Context, key: str, *, value: str):
+    payload = {
+        key: value
+    }
+    if key == 'TOKEN':
+        return await ctx.send(embed=Embed(title='Cannot mess with TOKEN'))
+
+    return await ctx.send(embed=Embed(title=await send_env(payload)))
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def rmenv(ctx: commands.Context, key: str):
+    payload = {
+        key: None
+    }
+    if key == 'TOKEN':
+        return await ctx.send(embed=Embed(title='Cannot mess with TOKEN'))
+
+    return await ctx.send(embed=Embed(title=await send_env(payload)))
 
 
 bot.run(getenv('BOT_TOKEN'))
