@@ -12,7 +12,7 @@ class Helper(commands.Bot):
         self.headers = {
             'Accept': 'application/vnd.heroku+json; version=3',
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer  0adcedc7-f568-42d3-907c-09560ba3e45f'
+            'Authorization': f"Bearer {getenv('HEROKU_TOKEN')}"
         }
 
     @staticmethod
