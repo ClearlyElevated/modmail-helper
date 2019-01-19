@@ -36,9 +36,16 @@ def get_payload(version):
 @commands.has_permissions(administrator=True)
 async def checkout(ctx, *, version: str):
     async with session.post(url=url, headers=headers,
-                            json=get_payload(version)) as r:
-        msg = (await r.json()).get('output_stream_url', 'Something\'s Wrong...')
-        await ctx.send(msg)
+                            json=get_payload(version)) as resp:
+
+        async with session.get(
+                url=(await resp.json()).get('output_stream_url')
+        ) as resp2:
+            while True:
+                chunk, b = await resp2.content.readchunk()
+                if b:
+                    break
+                await ctx.send(chunk.decode())
 
 
 bot.run(getenv('BOT_TOKEN'))
