@@ -125,9 +125,9 @@ async def checkout(ctx: commands.Context, *, version: str):
      - "$checkout latest" or "$checkout latest commit" for the latest commit.
      - "$checkout v2.3.5 silently" will mute output.
     """
-    async def send_info(type_, val):
+    async def send_info(type_, val, url):
         await ctx.send(embed=Embed(title=f'Checking out {type_}:',
-                                   description=f'`{val}`',
+                                   description=f'[`{val}`]({url})',
                                    color=Color.gold()))
 
     version = version.strip()
@@ -141,13 +141,13 @@ async def checkout(ctx: commands.Context, *, version: str):
 
     if version == 'latest release':
         version = await get_latest_release()
-        await send_info('version', version)
         url = versions[version]
-
-    elif version == 'latest commit':
+        await send_info('version', version, url)
+        
+    elif version in {'latest', 'latest commit'}:
         sha = await get_latest_commit()
-        await send_info('commit', sha)
         url = tarball_url.format(sha=sha)
+        await send_info('commit', sha, url)
 
     else:
         m = match(semantic_version_regex, version)
@@ -156,16 +156,17 @@ async def checkout(ctx: commands.Context, *, version: str):
             if m is None:
                 raise commands.BadArgument('Invalid Version/Commit SHA.')
             sha = m.group(0)
-            await send_info('commit', sha)
             url = tarball_url.format(sha=sha)
+            await send_info('commit', sha, url)
+
         else:
             version = m.group(0)
             if not version.startswith('v'):
                 version = 'v' + version
             if version not in versions:
                 raise commands.BadArgument(f'Cannot find version: {version}.')
-            await send_info('version', version)
             url = versions[version]
+            await send_info('version', version, url)        
 
     payload = {
         'source_blob': {
@@ -188,14 +189,14 @@ async def checkout(ctx: commands.Context, *, version: str):
             async with session.get(output_url) as resp2:
                 async for data, _ in resp2.content.iter_chunks():
                     data = data.decode()
-                    if len(data) + len(current) >= 2048:
+                    if len(data) + len(current) >= 2046:
                         current = data
                         if not current.strip(' \n\r'):
                             current = '...'
 
                         em = Embed(title='Output Stream',
                                    color=Color.blue(),
-                                   description=current[:2048])
+                                   description=f'`current[:2046]`')
                         msg = await ctx.send(embed=em)
                     else:
                         if current == '...':
@@ -206,13 +207,13 @@ async def checkout(ctx: commands.Context, *, version: str):
                             current = '...'
                         em = Embed(title='Output Stream',
                                    color=Color.blue(),
-                                   description=current)
+                                   description=f'`{current}`')
                         await msg.edit(embed=em)
 
             if msg.embeds[0].description == 'starting...':
                 em = Embed(title='Output Stream',
                            color=Color.blue(),
-                           description=f'Failed to stream output. {output_url}')
+                           description=f'[Failed to stream output]({output_url}).')
                 await msg.edit(embed=em)
         else:
             em = Embed(title='View Outputs:',
