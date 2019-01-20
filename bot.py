@@ -189,14 +189,14 @@ async def checkout(ctx: commands.Context, *, version: str):
             async with session.get(output_url) as resp2:
                 async for data, _ in resp2.content.iter_chunks():
                     data = data.decode()
-                    if len(data) + len(current) >= 2046:
+                    if len(data) + len(current) >= 2042:
                         current = data
                         if not current.strip(' \n\r'):
                             current = '...'
 
                         em = Embed(title='Output Stream',
                                    color=Color.blue(),
-                                   description=f'`current[:2046]`')
+                                   description=f'```{current[:2046]}```')
                         msg = await ctx.send(embed=em)
                     else:
                         if current == '...':
@@ -207,7 +207,7 @@ async def checkout(ctx: commands.Context, *, version: str):
                             current = '...'
                         em = Embed(title='Output Stream',
                                    color=Color.blue(),
-                                   description=f'`{current}`')
+                                   description=f'```{current}```')
                         await msg.edit(embed=em)
 
             if msg.embeds[0].description == 'starting...':
