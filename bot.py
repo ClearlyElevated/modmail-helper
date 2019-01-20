@@ -51,6 +51,12 @@ async def on_command_error(ctx: commands.Context,
             color=Color.red(),
             description=error.args[0]
         ))
+    else:
+        return await ctx.send(embed=Embed(
+            title="An unexpected error had occurred.",
+            color=Color.red(),
+            description=f'{type(error)}: {error.args}'
+        ))
 
 
 async def get_versions():
@@ -75,13 +81,24 @@ async def versions_(ctx: commands.Context):
     View all available versions releases for the repo.
     """
     versions = await get_versions()
-    em = Embed(title='Versions:')
+    em = Embed(title='Versions:', color=Color.blue())
     for num, (version, tarball) in enumerate(versions.items()):
         if num % 25 == 0 and num > 0:
             await ctx.send(embed=em)
-            em = Embed(title='Versions:')
+            em = Embed(title='Versions:', color=Color.blue())
         em.add_field(name=version, value=tarball)
     return await ctx.send(embed=em)
+
+
+async def send_success_or_fail(ctx, status):
+    if str(status).startswith('2'):
+        return await ctx.send(embed=Embed(
+            title='Success', color=Color.green()
+        ))
+    else:
+        return await ctx.send(embed=Embed(
+            title='Failed', color=Color.red()
+        ))
 
 
 @bot.command()
@@ -91,29 +108,45 @@ async def restart(ctx: commands.Context):
     Restarts the bot.
     """
     async with session.delete(restart_url, headers=headers) as resp:
-        status = 'Success' if str(resp.status).startswith('2') else 'Failed'
-        return await ctx.send(embed=Embed(title=status))
+        return await send_success_or_fail(ctx, str(resp.status))
 
 
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def checkout(ctx: commands.Context, *, version: str):
     """
-    Checkout a specific version.
+    Checkout a specific version or commit.
 
-    See "$versions" for a list of versions.
+    See "$versions" for a list of versions. Trail the version or commit with
+    "silently" to mute output.
 
+     - "$checkout 122ef24" or "$checkout v1.2.1"
      - "$checkout latest release" for the latest release.
      - "$checkout latest" or "$checkout latest commit" for the latest commit.
+     - "$checkout v2.3.5 silently" will mute output.
     """
+    async def send_info(type_, val):
+        await ctx.send(embed=Embed(title=f'Checking out {type_}:',
+                                   description=f'`{val}`',
+                                   color=Color.gold()))
+
+    version = version.strip()
+    if version.endswith(' silently'):
+        verbose = False
+        version = version[:-9]
+    else:
+        verbose = True
+
     versions = await get_versions()
 
     if version == 'latest release':
         version = await get_latest_release()
+        await send_info('version', version)
         url = versions[version]
 
     elif version == 'latest commit':
         sha = await get_latest_commit()
+        await send_info('commit', sha)
         url = tarball_url.format(sha=sha)
 
     else:
@@ -123,15 +156,15 @@ async def checkout(ctx: commands.Context, *, version: str):
             if m is None:
                 raise commands.BadArgument('Invalid Version/Commit SHA.')
             sha = m.group(0)
+            await send_info('commit', sha)
             url = tarball_url.format(sha=sha)
         else:
             version = m.group(0)
             if not version.startswith('v'):
                 version = 'v' + version
-
             if version not in versions:
                 raise commands.BadArgument(f'Cannot find version: {version}.')
-
+            await send_info('version', version)
             url = versions[version]
 
     payload = {
@@ -139,46 +172,60 @@ async def checkout(ctx: commands.Context, *, version: str):
             'url': url
         }
     }
+
     async with session.post(build_url, headers=headers,
                             json=payload) as resp:
 
-        em = Embed(title="Output Stream", description='starting...')
-        msg = await ctx.send(embed=em)
-        current = ''
-
         output_url = (await resp.json()).get('output_stream_url')
-        async with session.get(output_url) as resp2:
-            async for data, _ in resp2.content.iter_chunks():
-                data = data.decode()
-                if len(data) + len(current) >= 2048:
-                    current = data
-                    if not current.strip(' \n\r'):
-                        current = '...'
 
-                    em = Embed(title='Output Stream',
-                               description=current[:2048])
-                    msg = await ctx.send(embed=em)
-                else:
-                    if current == '...':
+        if verbose:
+            em = Embed(title="Output Stream",
+                       color=Color.blue(),
+                       description='starting...')
+            msg = await ctx.send(embed=em)
+            current = ''
+
+            async with session.get(output_url) as resp2:
+                async for data, _ in resp2.content.iter_chunks():
+                    data = data.decode()
+                    if len(data) + len(current) >= 2048:
                         current = data
-                    else:
-                        current += data
-                    if not current.strip(' \n\r'):
-                        current = '...'
-                    em = Embed(title='Output Stream', description=current)
-                    await msg.edit(embed=em)
+                        if not current.strip(' \n\r'):
+                            current = '...'
 
-        if msg.embeds[0].description == 'starting...':
-            em = Embed(title='Output Stream',
-                       description=f'Failed to stream output. {output_url}')
-            await msg.edit(embed=em)
+                        em = Embed(title='Output Stream',
+                                   color=Color.blue(),
+                                   description=current[:2048])
+                        msg = await ctx.send(embed=em)
+                    else:
+                        if current == '...':
+                            current = data
+                        else:
+                            current += data
+                        if not current.strip(' \n\r'):
+                            current = '...'
+                        em = Embed(title='Output Stream',
+                                   color=Color.blue(),
+                                   description=current)
+                        await msg.edit(embed=em)
+
+            if msg.embeds[0].description == 'starting...':
+                em = Embed(title='Output Stream',
+                           color=Color.blue(),
+                           description=f'Failed to stream output. {output_url}')
+                await msg.edit(embed=em)
+        else:
+            em = Embed(title='View Outputs:',
+                       color=Color.blue(),
+                       description=output_url)
+            await ctx.send(embed=em)
 
 
 async def send_env(payload):
     async with session.patch(config_url,
                              headers=headers,
                              json=payload) as resp:
-        return 'Success' if str(resp.status).startswith('2') else 'Failed'
+        return str(resp.status)
 
 
 @bot.command()
@@ -191,9 +238,9 @@ async def setenv(ctx: commands.Context, key: str, *, value: str):
         key: value
     }
     if key == 'TOKEN':
-        return await ctx.send(embed=Embed(title='Cannot mess with TOKEN.'))
+        raise commands.BadArgument('Cannot mess with TOKEN.')
 
-    return await ctx.send(embed=Embed(title=await send_env(payload)))
+    return await send_success_or_fail(ctx, await send_env(payload))
 
 
 @bot.command()
@@ -206,9 +253,9 @@ async def rmenv(ctx: commands.Context, key: str):
         key: None
     }
     if key == 'TOKEN':
-        return await ctx.send(embed=Embed(title='Cannot mess with TOKEN.'))
+        raise commands.BadArgument('Cannot mess with TOKEN.')
 
-    return await ctx.send(embed=Embed(title=await send_env(payload)))
+    return await send_success_or_fail(ctx, await send_env(payload))
 
 
 @bot.command(name='getenv')
@@ -219,11 +266,11 @@ async def getenv_(ctx: commands.Context):
     """
     async with session.get(config_url, headers=headers) as resp:
         envs = await resp.json()
-        em = Embed(title='Environment Variables:')
+        em = Embed(title='Environment Variables:', color=Color.blue())
         for num, (key, val) in enumerate(envs.items()):
             if num % 25 == 0 and num > 0:
                 await ctx.send(embed=em)
-                em = Embed(title='Environment Variables:')
+                em = Embed(title='Environment Variables:', color=Color.blue())
             em.add_field(name=key + ':', value=f'`{val}`')
         return await ctx.send(embed=em)
 
