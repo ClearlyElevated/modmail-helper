@@ -12,7 +12,7 @@ bot = commands.Bot(command_prefix='$')
 session = ClientSession(loop=bot.loop)
 
 heroku_base = f"https://api.heroku.com/apps/{getenv('APP_NAME')}"
-github_base = 'https://api.github.com/repos/kyb3r/modmail/'
+github_base = 'https://api.github.com/repos/kyb3r/modmail'
 
 build_url = heroku_base + '/builds'
 versions_url = github_base + '/tags'
