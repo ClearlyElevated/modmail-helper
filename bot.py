@@ -117,7 +117,8 @@ async def on(ctx: commands.Context):
     """
     Turns on the bot.
     """
-    async with session.post(restart_url, headers=headers) as resp:
+    async with session.post(restart_url, headers=headers,
+                            json={'command': 'python bot.py'}) as resp:
         return await send_success_or_fail(ctx, str(resp.status))
 
 
