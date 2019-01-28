@@ -121,7 +121,7 @@ async def restart(ctx: commands.Context):
 
     async with session.post(dynos_url, headers=headers,
                             json={'command': 'python bot.py'}) as resp:
-        await status.append(resp.status)
+        status.append(resp.status)
     return await send_success_or_fail(ctx, status)
 
 
