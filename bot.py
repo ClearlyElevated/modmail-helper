@@ -19,7 +19,7 @@ build_url = heroku_base + '/builds'
 versions_url = github_base + '/tags'
 latest_release_url = github_base + '/releases/latest'
 latest_commit_url = github_base + '/commits'
-restart_url = heroku_base + '/dynos'
+dynos_url = heroku_base + '/dynos'
 config_url = heroku_base + '/config-vars'
 tarball_url = github_base + '/tarball/{sha}'
 
@@ -91,7 +91,11 @@ async def versions_(ctx: commands.Context):
 
 
 async def send_success_or_fail(ctx, status):
-    if str(status).startswith('2'):
+    if isinstance(status, list):
+        condition = all(str(s).startswith('2') for s in status)
+    else:
+        condition = str(status).startswith('2')
+    if condition:
         return await ctx.send(embed=Embed(
             title='Success', color=Color.green()
         ))
@@ -107,8 +111,18 @@ async def restart(ctx: commands.Context):
     """
     Restarts the bot.
     """
-    async with session.delete(restart_url, headers=headers) as resp:
-        return await send_success_or_fail(ctx, str(resp.status))
+    status = []
+    async with session.get(dynos_url, headers=headers) as resp:
+        status.append(resp.status)
+        for dyno in await resp.json():
+            async with session.post(f'{dynos_url}/{dyno["id"]}/actions/stop',
+                                    headers=headers) as r:
+                status.append(r.status)
+
+    async with session.post(dynos_url, headers=headers,
+                            json={'command': 'python bot.py'}) as resp:
+        await status.append(resp.status)
+    return await send_success_or_fail(ctx, status)
 
 
 @bot.command()
@@ -117,9 +131,26 @@ async def on(ctx: commands.Context):
     """
     Turns on the bot.
     """
-    async with session.post(restart_url, headers=headers,
+    async with session.post(dynos_url, headers=headers,
                             json={'command': 'python bot.py'}) as resp:
         return await send_success_or_fail(ctx, str(resp.status))
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def off(ctx: commands.Context):
+    """
+    Turns off the bot.
+    """
+    status = []
+    async with session.get(dynos_url, headers=headers) as resp:
+        status.append(resp.status)
+        for dyno in await resp.json():
+            async with session.post(f'{dynos_url}/{dyno["id"]}/actions/stop',
+                                    headers=headers) as r:
+                status.append(r.status)
+
+    return await send_success_or_fail(ctx, status)
 
 
 @bot.command()
