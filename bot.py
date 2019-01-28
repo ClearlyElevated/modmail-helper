@@ -113,6 +113,16 @@ async def restart(ctx: commands.Context):
 
 @bot.command()
 @commands.has_permissions(administrator=True)
+async def on(ctx: commands.Context):
+    """
+    Turns on the bot.
+    """
+    async with session.post(restart_url, headers=headers) as resp:
+        return await send_success_or_fail(ctx, str(resp.status))
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
 async def checkout(ctx: commands.Context, *, version: str):
     """
     Checkout a specific version or commit.
